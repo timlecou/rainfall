@@ -1,0 +1,10 @@
+Comme pour tous les binaires je commence toujours par utiliser ghidra pour le desassembler.
+
+Le binaire presnete dans la fonction main une condition, si l'argument passe en parametre du binaire vaut 0x1a7, soit 423 en decimal, le binaire lance un shell.
+
+Comme le binaire appartient a level1, le shell aura les droits de level1.
+
+$>./level0 423
+$ cat /home/user/level1/.pass
+1fe8a524fa4bec01ca4ea2a869af2a02260d4a7d5fe7e7c24d8617e6dca12d3a
+$

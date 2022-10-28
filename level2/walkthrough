@@ -1,0 +1,6 @@
+Je commence par desassembler le binaire level2 dans ghidra
+
+Il y a une fonction p() en plus de la fonction main()
+
+La fonction main fait seulement un appel a p() puis retourne
+La fonction p() 

