@@ -1,1 +1,0 @@
-./script.py > out && cat out | ./level4
