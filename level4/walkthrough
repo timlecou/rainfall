@@ -1,4 +1,4 @@
-Je commence par desassembler le binaire level3 dans ghidra
+Je commence par desassembler le binaire level4 dans ghidra
 
 Il y a une fonction n() et une fonction p() en plus de la fonction main()
 
@@ -20,7 +20,7 @@ Pour commencer il faut que je trouve la zone memoire sur laquelle je peux ecrire
 
 Pour cela je vais commencer par poser un breakpoint juste apres l'appel a printf dans gdb et je vais input au binaire une chaine de caractere qui va me permettre d'obtenir des informations sur la zone memoire que je peux manipuler.
 
-$>gdb level3
+$>gdb level4
 (gdb)disas p
 Dump of assembler code for function p:
    0x08048444 <+0>:	push   %ebp
@@ -40,7 +40,7 @@ Le programme attend un input, je vais lui donner "AAAA.%x.%x.%x.%x."
 
 (gdb)b *0x08048455
 (gdb)r
-Starting program: /home/user/level3/level3
+Starting program: /home/user/level4/level4
 AAAA.%x.%x.%x.%x.
 AAAA.b7ff26b0.bffff734.b7fd0ff4.0.
 
@@ -284,7 +284,7 @@ Je test d'abord dans gdb:
 
 (gdb)b *0x080484d92
 (gdb)r < out
-Starting program: /home/user/level3/level3 < out
+Starting program: /home/user/level4/level4 < out
 Breakpoint 1, 0x08048492 in n ()
 (gdb) info register
 eax            0x1025544	16930116

