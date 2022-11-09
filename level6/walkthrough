@@ -3,8 +3,8 @@ Je commence par decompiler le binaire level6 sur ghidra et je decouvre 2 fonctio
 	-n()
 	-m()
 
-Dans le main on aloue 1 chaine de caractere et 1 pointeur sur fonction avec malloc puis on assige la fontion m() au pointeur sur fonction.
-Ensuite on copie argv[1] dans la chaine alouee avec strcpy.
+Dans le main on aloue 1 chaine de caractere et 1 pointeur sur fonction avec malloc puis on assigne la fontion m() au pointeur sur fonction.
+Ensuite on copie argv[1] dans la chaine allouee avec strcpy.
 Puis le ppointeur sur fonction appelle la fonction sur laquelle il pointe.
 
 La fonction m() ecrit "Nope" sur STDIN avec puts() puis retourne.
