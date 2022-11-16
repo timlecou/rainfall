@@ -1,0 +1,22 @@
+Le binaire bonus1 segfault si on l'execute sans arguments et ne fait rien si on l'execute avec des arguments.
+
+En desassemblant avec ghidra on voit que le 1er argument est stocke dans un int apres un appel a atoi(), il est compare et si il est egale ou inferieur a 9 on rentre dans la condition:
+
+A cet endroit on utilise memcpy() pour copier le 2eme argument dans un buffer de 40, on copie le 1er argument * 4 characteres donc on peut en copier maximum 9 * 4 = 36.
+
+Ensuite le premier argument est compare a 0x464c4f57, si ils sont egaux on lance un shell avec execl("/bin/sh").
+
+
+En 1er argument on peut mettre un nombre negatif, ca nous permettra de passer la premiere condition et en plus de gagner plus de caracteres dans le memecpy().
+
+Nous avons besoin de pouvoir ecrire 44 caracteres pour ecrire 0x574f4c46.
+
+Le INT_MIN vaut -2147483648, en lui enlevant 11 on obtient -2147483637
+
+Comme la valeur va etre multipliee par 4 dans le memecpy() on a 11 * 4 = 44 caracteres.
+
+bonus1@RainFall:~$ ./bonus1 -2147483637 $(python -c 'print "A"* 40 + "\x46\x4c\x4f\x57"')
+$ whoami
+bonus2
+$ cat /home/user/bonus2/.pass
+579bd19263eb8655e4cf7b742d75edf8c38226925d78db8163506f5191825245
