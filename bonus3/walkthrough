@@ -1,0 +1,27 @@
+After disassembling the binary I see interesting things:
+
+-A call to atoi() and a call to strcmp() on argv[1]
+-A call to fread() on the password
+-A call to exec() and launch a shell
+
+I need to make the line execute, it is after the condition:
+if (strcmp(buffer, argv[1]) == 0)
+
+so if I want to make this condition true I have to match the buffer content with argv[1] I have to find an input that does that.
+
+On the code before the condition we can see:
+
+buffer[input] = 0;
+
+So a \0 will be inserted at the index of argv[1].
+
+I can input an empty string "" so the value returned by atoi will be 0 and the buffer variable will have a \0 on the first cvharacter and be equal to "" too.
+
+Let's try:
+
+bonus3@RainFall:~$ ./bonus3 ""
+$ whoami
+end
+$ cat /home/user/end/.pass
+3321b6f81659f9a71c76616f606e4b50189cecfea611393d5d649f75e157353c
+$

